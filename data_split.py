@@ -1,46 +1,71 @@
 import os
 import shutil
-from sklearn.model_selection import train_test_split
+import random
 
-# 定义数据集路径
-dataset_dir = "dataset"  # 数据集根目录
-output_dir = "split_dataset"  # 划分后的数据集保存路径
+# 原始数据集路径
+source_dir = "COVID-19_Radiography_Dataset"
 
-# 定义划分比例
-train_ratio = 0.7  # 训练集比例
-val_ratio = 0.15   # 验证集比例
-test_ratio = 0.15  # 测试集比例
+# 目标数据集路径
+target_dir = "dataset/COVID_19_Radiography_Dataset"
 
-# 创建输出目录
-os.makedirs(os.path.join(output_dir, "train"), exist_ok=True)
-os.makedirs(os.path.join(output_dir, "val"), exist_ok=True)
-os.makedirs(os.path.join(output_dir, "test"), exist_ok=True)
+# 设置划分比例
+train_ratio = 0.7
+val_ratio = 0.15
+test_ratio = 0.15
 
-# 遍历每个类别
-for class_name in os.listdir(dataset_dir):
-    class_dir = os.path.join(dataset_dir, class_name)
-    if not os.path.isdir(class_dir):
+# 确保目标目录存在
+os.makedirs(target_dir, exist_ok=True)
+for split in ["train", "val", "test"]:
+    os.makedirs(os.path.join(target_dir, split), exist_ok=True)
+
+# 需要划分的类别
+categories = ["COVID", "Lung_Opacity", "Normal", "Viral Pneumonia"]
+
+for category in categories:
+    # **所有类别都在各自的 images/ 目录下**
+    category_path = os.path.join(source_dir, category, "images")
+
+    # **检查目录是否存在**
+    if not os.path.exists(category_path):
+        print(f"⚠️ 警告: {category_path} 目录不存在，跳过...")
         continue
 
-    # 获取当前类别的所有文件
-    files = [os.path.join(class_dir, f) for f in os.listdir(
-        class_dir) if os.path.isfile(os.path.join(class_dir, f))]
+    print(f"📂 处理类别: {category} (路径: {category_path})")
 
-    # 划分数据集
-    train_files, test_files = train_test_split(
-        files, test_size=test_ratio, random_state=42)
-    train_files, val_files = train_test_split(
-        train_files, test_size=val_ratio / (1 - test_ratio), random_state=42)
+    # 获取所有图片
+    all_files = [
+        f for f in os.listdir(category_path) if f.endswith((".png", ".jpg", ".jpeg"))
+    ]
+    random.shuffle(all_files)  # 打乱顺序
 
-    # 将文件复制到对应的目录
-    def copy_files(files, split_name):
-        split_dir = os.path.join(output_dir, split_name, class_name)
-        os.makedirs(split_dir, exist_ok=True)
+    print(f"🔍 找到 {len(all_files)} 张图片")
+
+    if len(all_files) == 0:
+        continue
+
+    # 计算划分数量
+    total = len(all_files)
+    train_count = int(total * train_ratio)
+    val_count = int(total * val_ratio)
+
+    train_files = all_files[:train_count]
+    val_files = all_files[train_count: train_count + val_count]
+    test_files = all_files[train_count + val_count:]
+
+    # 复制文件到 train/val/test 目录
+    for split, files in zip(
+        ["train", "val", "test"], [train_files, val_files, test_files]
+    ):
+        category_target = os.path.join(target_dir, split, category)
+        os.makedirs(category_target, exist_ok=True)
+
         for file in files:
-            shutil.copy(file, split_dir)
+            src = os.path.join(category_path, file)
+            dst = os.path.join(category_target, file)
+            shutil.copy2(src, dst)
 
-    copy_files(train_files, "train")
-    copy_files(val_files, "val")
-    copy_files(test_files, "test")
+    print(
+        f"✅ {category}: 训练集 {train_count} | 验证集 {val_count} | 测试集 {len(test_files)}"
+    )
 
-print("数据集划分完成！")
+print("🎉 数据集划分完成！")
